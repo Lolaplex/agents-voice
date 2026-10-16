@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
-from .config import load_config, save_config
+from .config import save_config
 from .engine import speak, stop
 from .mcp_server import serve, voice_status
 
@@ -13,7 +12,7 @@ from .mcp_server import serve, voice_status
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="agents-voice",
-        description="Fast, minimal speech output MCP server and CLI for AI coding agents.",
+        description="Fast, minimal multi-provider speech output MCP server and CLI for AI coding agents.",
     )
     subparsers = parser.add_subparsers(dest="subcommand", help="Subcommand to run")
 
@@ -24,6 +23,9 @@ def main() -> None:
     speak_p = subparsers.add_parser("speak", help="Speak text directly")
     speak_p.add_argument("text", nargs="+", help="The text to speak")
     speak_p.add_argument("--wait", action="store_true", help="Wait until audio finishes playing")
+    speak_p.add_argument("--provider", help="Override provider (openrouter, openai, gemini, elevenlabs, azure, custom)")
+    speak_p.add_argument("--model", help="Override model (e.g. openai/gpt-4o-mini-tts, elevenlabs/eleven-v4-turbo)")
+    speak_p.add_argument("--voice", help="Override voice (e.g. marin, cedar, Kore, de-DE-Seraphina:DragonHDLatestNeural)")
 
     # stop
     subparsers.add_parser("stop", help="Stop currently playing audio")
@@ -32,12 +34,24 @@ def main() -> None:
     subparsers.add_parser("status", help="Show current voice configuration and backend status")
 
     # config
-    config_p = subparsers.add_parser("config", help="Configure voice credentials and settings")
-    config_p.add_argument("--key", help="Azure Speech subscription key")
-    config_p.add_argument("--region", help="Azure Speech region (e.g. westeurope)")
-    config_p.add_argument("--voice", help="Neural voice name (e.g. de-DE-SeraphinaMultilingualNeural)")
-    config_p.add_argument("--speed", type=float, help="Speech rate multiplier (e.g. 1.05)")
-    config_p.add_argument("--provider", help="Voice provider (azure)")
+    config_p = subparsers.add_parser("config", help="Configure voice provider, model, voice, and credentials")
+    config_p.add_argument(
+        "--provider",
+        help="Voice provider: openrouter | openai | gemini | elevenlabs | azure | custom",
+    )
+    config_p.add_argument("--key", help="API key for the active provider")
+    config_p.add_argument(
+        "--model",
+        help="Model ID (e.g. openai/gpt-4o-mini-tts, elevenlabs/eleven-v4-turbo, gemini-2.5-flash-preview-tts)",
+    )
+    config_p.add_argument(
+        "--voice",
+        help="Voice ID/name (e.g. marin, cedar, coral, Kore, de-DE-Seraphina:DragonHDLatestNeural)",
+    )
+    config_p.add_argument("--region", help="Azure Speech region (e.g. swedencentral)")
+    config_p.add_argument("--base-url", dest="base_url", help="Custom OpenAI-compatible base URL")
+    config_p.add_argument("--instructions", help="Tone/style instructions for steerable TTS models")
+    config_p.add_argument("--speed", type=float, help="Speech rate multiplier (e.g. 1.0)")
 
     # test
     subparsers.add_parser("test", help="Play a quick test speech sample")
@@ -48,7 +62,13 @@ def main() -> None:
         serve()
     elif args.subcommand == "speak":
         text = " ".join(args.text)
-        res = speak(text, wait=args.wait)
+        res = speak(
+            text,
+            wait=args.wait,
+            provider=args.provider,
+            model=args.model,
+            voice=args.voice,
+        )
         print(res)
     elif args.subcommand == "stop":
         res = stop()
@@ -58,18 +78,23 @@ def main() -> None:
     elif args.subcommand == "config":
         cfg = save_config(
             provider=args.provider,
-            azure_key=args.key,
-            azure_region=args.region,
+            key=args.key,
+            model=args.model,
             voice=args.voice,
+            azure_region=args.region,
+            base_url=args.base_url,
+            instructions=args.instructions,
             speed=args.speed,
         )
-        print(f"Konfiguration gespeichert: Provider={cfg.provider}, Region={cfg.azure_region}, Voice={cfg.voice}")
+        print(
+            f"Konfiguration gespeichert: Provider={cfg.provider}, "
+            f"Model={cfg.model}, Voice={cfg.voice}"
+        )
     elif args.subcommand == "test":
         print("Spreche Testphrase...")
         res = speak("Hallo Felix! agents-voice ist bereit.", wait=True)
         print(res)
     else:
-        # Default to serve if no subcommand provided (standard for MCP invocations)
         serve()
 
 

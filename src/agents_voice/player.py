@@ -1,16 +1,14 @@
-"""Cross-platform audio player with zero heavy dependencies."""
+"""Cross-platform audio player supporting in-memory WAV and MP3 with zero heavy dependencies."""
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import platform
 import subprocess
 import tempfile
 import urllib.request
-from typing import Optional
-
-from .config import VoiceConfig
 
 _IS_WINDOWS = platform.system() == "Windows"
 _IS_DARWIN = platform.system() == "Darwin"
@@ -53,7 +51,9 @@ def send_to_dumbo_bridge(text: str, port: int = 12480) -> bool:
 def stop_dumbo_bridge(port: int = 12480) -> bool:
     """Stops audio in Dumbo Bridge."""
     url = f"http://127.0.0.1:{port}/v1/stop"
-    req = urllib.request.Request(url, data=b"{}", headers={"Content-Type": "application/json"}, method="POST")
+    req = urllib.request.Request(
+        url, data=b"{}", headers={"Content-Type": "application/json"}, method="POST"
+    )
     try:
         with urllib.request.urlopen(req, timeout=1.0) as response:
             return response.status == 200
@@ -61,9 +61,34 @@ def stop_dumbo_bridge(port: int = 12480) -> bool:
         return False
 
 
+def _is_mp3(data: bytes) -> bool:
+    if len(data) < 4:
+        return False
+    if data[:3] == b"ID3":
+        return True
+    return data[0] == 0xFF and (data[1] & 0xE0) == 0xE0
+
+
+def _play_mp3_windows(data: bytes, wait: bool = False) -> None:
+    """Plays MP3 bytes on Windows using built-in winmm MCI."""
+    temp_dir = Path_temp = os.path.join(tempfile.gettempdir(), "agents_voice_last.mp3")
+    winmm = ctypes.windll.winmm
+    winmm.mciSendStringW("close agents_voice_mp3", None, 0, 0)
+    with open(Path_temp, "wb") as f:
+        f.write(data)
+    winmm.mciSendStringW(f'open "{Path_temp}" type mpegvideo alias agents_voice_mp3', None, 0, 0)
+    flag = "wait" if wait else ""
+    winmm.mciSendStringW(f"play agents_voice_mp3 {flag}".strip(), None, 0, 0)
+    if wait:
+        winmm.mciSendStringW("close agents_voice_mp3", None, 0, 0)
+
+
 def play_wav(data: bytes, wait: bool = False) -> None:
-    """Plays WAV audio directly with zero external apps or dependencies."""
+    """Plays WAV or MP3 audio directly with zero external apps or dependencies."""
     if _IS_WINDOWS:
+        if _is_mp3(data):
+            _play_mp3_windows(data, wait=wait)
+            return
         flags = winsound.SND_MEMORY
         if not wait:
             flags |= winsound.SND_ASYNC
@@ -71,7 +96,8 @@ def play_wav(data: bytes, wait: bool = False) -> None:
         return
 
     # Fallback for macOS / Linux
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+    suffix = ".mp3" if _is_mp3(data) else ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
         f.write(data)
         temp_path = f.name
 
@@ -95,13 +121,15 @@ def play_wav(data: bytes, wait: bool = False) -> None:
 
 def stop_playback(port: int = 12480) -> None:
     """Immediately terminates any currently playing audio (local and Dumbo)."""
-    # 1. Stop local audio
     if _IS_WINDOWS:
         winsound.PlaySound(None, 0)
+        try:
+            ctypes.windll.winmm.mciSendStringW("close agents_voice_mp3", None, 0, 0)
+        except Exception:
+            pass
     elif _IS_DARWIN:
         subprocess.run(["killall", "afplay"], check=False, stderr=subprocess.DEVNULL)
     else:
         subprocess.run(["killall", "aplay"], check=False, stderr=subprocess.DEVNULL)
 
-    # 2. Also notify Dumbo bridge if running
     stop_dumbo_bridge(port)

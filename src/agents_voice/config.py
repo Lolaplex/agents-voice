@@ -66,17 +66,18 @@ class VoiceConfig:
     base_url: str = ""
     instructions: str = DEFAULT_INSTRUCTIONS
     keys: Dict[str, str] = field(default_factory=dict)
-    azure_key: str = ""
     dumbo_bridge_port: int = 12480
     use_dumbo_bridge_if_available: bool = True
+
+    @property
+    def azure_key(self) -> str:
+        return self.get_key("azure")
 
     def get_key(self, provider: Optional[str] = None) -> str:
         prov = (provider or self.provider).strip().lower()
         # 1. Explicit keys dict
         if prov in self.keys and self.keys[prov].strip():
             return self.keys[prov].strip()
-        if prov == "azure" and self.azure_key.strip():
-            return self.azure_key.strip()
 
         # 2. Environment variables
         env_map = {
@@ -109,7 +110,6 @@ class VoiceConfig:
             "base_url": self.base_url,
             "instructions": self.instructions,
             "keys": self.keys,
-            "azure_key": self.azure_key,
             "dumbo_bridge_port": self.dumbo_bridge_port,
             "use_dumbo_bridge_if_available": self.use_dumbo_bridge_if_available,
         }
@@ -119,9 +119,9 @@ class VoiceConfig:
         prov = str(data.get("provider", "azure")).strip().lower()
         defaults = PROVIDER_DEFAULTS.get(prov, PROVIDER_DEFAULTS["azure"])
         keys = dict(data.get("keys") or {})
-        azure_key = str(data.get("azure_key", "")).strip()
-        if azure_key and "azure" not in keys:
-            keys["azure"] = azure_key
+        legacy_azure_key = str(data.get("azure_key", "")).strip()
+        if legacy_azure_key and "azure" not in keys:
+            keys["azure"] = legacy_azure_key
 
         return cls(
             provider=prov,
@@ -132,7 +132,6 @@ class VoiceConfig:
             base_url=str(data.get("base_url") or defaults["base_url"]),
             instructions=str(data.get("instructions") or DEFAULT_INSTRUCTIONS),
             keys=keys,
-            azure_key=keys.get("azure", azure_key),
             dumbo_bridge_port=int(data.get("dumbo_bridge_port", 12480)),
             use_dumbo_bridge_if_available=bool(data.get("use_dumbo_bridge_if_available", True)),
         )
@@ -193,10 +192,6 @@ def load_config() -> VoiceConfig:
     if env_base_url:
         config.base_url = env_base_url.strip()
 
-    # Populate azure_key field for backwards compatibility
-    if not config.azure_key:
-        config.azure_key = config.get_key("azure")
-
     return config
 
 
@@ -247,8 +242,6 @@ def save_config(
     if key is not None:
         clean_key = key.strip()
         config.keys[config.provider] = clean_key
-        if config.provider == "azure":
-            config.azure_key = clean_key
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")

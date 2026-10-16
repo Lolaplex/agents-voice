@@ -52,6 +52,76 @@ def _is_mp3(data: bytes) -> bool:
     return data[0] == 0xFF and (data[1] & 0xE0) == 0xE0
 
 
+def _synthesize_openrouter_audio(
+    text: str,
+    key: str,
+    model: str,
+    voice: str,
+    instructions: Optional[str] = None,
+) -> bytes:
+    """Synthesizes speech via OpenRouter audio chat models (openai/gpt-audio-mini, openai/gpt-audio)."""
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    prompt = (
+        "Lies den folgenden Text laut auf Deutsch vor. Antworte ausschließlich mit dem gesprochenen Audio "
+        f"dieses Textes ohne Einleitung oder eigene Kommentare:\n\n{text.strip()}"
+    )
+    messages = []
+    if instructions:
+        messages.append({"role": "system", "content": instructions})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model": model,
+        "modalities": ["text", "audio"],
+        "audio": {
+            "voice": voice,
+            "format": "pcm16",
+        },
+        "stream": True,
+        "messages": messages,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://lolaplex.org",
+        "X-Title": "agents-voice",
+        "User-Agent": "agents-voice",
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            chunks = []
+            for raw_line in response:
+                line = raw_line.decode("utf-8").strip()
+                if line.startswith("data: ") and line != "data: [DONE]":
+                    try:
+                        obj = json.loads(line[6:])
+                        choices = obj.get("choices") or []
+                        if choices:
+                            delta = choices[0].get("delta") or {}
+                            audio_meta = delta.get("audio") or {}
+                            b64_data = audio_meta.get("data")
+                            if b64_data:
+                                chunks.append(base64.b64decode(b64_data))
+                    except Exception:
+                        continue
+            if not chunks:
+                raise RuntimeError("OpenRouter Audio hat keine Audiodaten zurückgegeben.")
+            pcm_data = b"".join(chunks)
+            return pcm_to_wav(pcm_data, sample_rate=24000)
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"OpenRouter Audio Fehler ({e.code}): {err_body}") from e
+
+
 def synthesize_openai_compatible(
     text: str,
     config: VoiceConfig,
@@ -60,11 +130,6 @@ def synthesize_openai_compatible(
     """Synthesizes speech via OpenAI, OpenRouter, or custom OpenAI-compatible /audio/speech endpoint."""
     prov = (provider_override or config.provider).strip().lower()
     defaults = PROVIDER_DEFAULTS.get(prov, PROVIDER_DEFAULTS["openai"])
-
-    base_url = (config.base_url or defaults["base_url"]).rstrip("/")
-    if not base_url.endswith("/v1") and "/api/v1" not in base_url:
-        base_url = f"{base_url}/v1"
-    url = f"{base_url}/audio/speech"
 
     key = config.get_key(prov)
     if not key and prov != "custom":
@@ -76,6 +141,21 @@ def synthesize_openai_compatible(
     model = config.model.strip() or defaults["model"]
     voice = config.voice.strip() or defaults["voice"]
     speed = config.speed if config.speed else 1.0
+
+    # If OpenRouter and using gpt-audio models, use OpenRouter's audio completion endpoint
+    if prov == "openrouter" and ("gpt-audio" in model or "audio" in model):
+        return _synthesize_openrouter_audio(
+            text=text,
+            key=key,
+            model=model,
+            voice=voice,
+            instructions=config.instructions,
+        )
+
+    base_url = (config.base_url or defaults["base_url"]).rstrip("/")
+    if not base_url.endswith("/v1") and "/api/v1" not in base_url:
+        base_url = f"{base_url}/v1"
+    url = f"{base_url}/audio/speech"
 
     # Try wav first for zero-latency RAM playback, fallback to mp3 if sub-provider requires it
     for fmt in ("wav", "mp3"):

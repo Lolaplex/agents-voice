@@ -9,7 +9,7 @@
 
 ## Commands
 - Test status: `python -m agents_voice status`
-- Configure: `python -m agents_voice config --key <key> --region westeurope --voice de-DE-SeraphinaMultilingualNeural`
+- Configure: `python -m agents_voice config --key <key> --region swedencentral --voice de-DE-Seraphina:DragonHDLatestNeural`
 - Speak phrase: `python -m agents_voice speak "Hallo Felix"`
 - Test audio: `python -m agents_voice test`
 - Stop playback: `python -m agents_voice stop`

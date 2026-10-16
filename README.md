@@ -13,7 +13,7 @@ pip install -e .
 ## Configuration
 Credentials are saved to `~/.agents/voice.json`:
 ```bash
-python -m agents_voice config --key "YOUR_AZURE_KEY" --region "westeurope" --voice "de-DE-SeraphinaMultilingualNeural"
+python -m agents_voice config --key "YOUR_AZURE_KEY" --region "swedencentral" --voice "de-DE-Seraphina:DragonHDLatestNeural"
 ```
 If you already configured Azure in Dumbo, `agents-voice` automatically detects and uses it.
 

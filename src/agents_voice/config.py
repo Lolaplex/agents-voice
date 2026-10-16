@@ -12,9 +12,9 @@ CONFIG_DIR = Path.home() / ".agents"
 CONFIG_FILE = CONFIG_DIR / "voice.json"
 
 DEFAULT_PROVIDER = "azure"
-DEFAULT_AZURE_REGION = "westeurope"
-DEFAULT_AZURE_VOICE = "de-DE-SeraphinaMultilingualNeural"
-DEFAULT_SPEED = 1.05
+DEFAULT_AZURE_REGION = "swedencentral"
+DEFAULT_AZURE_VOICE = "de-DE-Seraphina:DragonHDLatestNeural"
+DEFAULT_SPEED = 1.0
 
 
 @dataclass

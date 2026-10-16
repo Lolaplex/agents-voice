@@ -10,7 +10,7 @@
 ## Commands
 - Test status: `python -m agents_voice status`
 - Configure: `python -m agents_voice config --key <key> --region swedencentral --voice de-DE-Seraphina:DragonHDLatestNeural`
-- Speak phrase: `python -m agents_voice speak "Hallo Felix"`
+- Speak phrase: `python -m agents_voice speak "Voice output ready"`
 - Test audio: `python -m agents_voice test`
 - Stop playback: `python -m agents_voice stop`
 - Start FastMCP: `python -m agents_voice serve`

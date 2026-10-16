@@ -55,7 +55,6 @@ def speak(
     # 2. Standalone synthesis & playback across providers
     prov = cfg.provider.strip().lower()
     if prov == "azure":
-        cfg.azure_key = cfg.get_key("azure")
         audio_data = synthesize_azure(clean_text, cfg)
     elif prov in ("openrouter", "openai", "custom", "local", "kokoro"):
         norm_prov = "custom" if prov in ("local", "kokoro") else prov

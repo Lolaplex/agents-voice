@@ -9,6 +9,7 @@ import platform
 import subprocess
 import tempfile
 import urllib.request
+import uuid
 
 _IS_WINDOWS = platform.system() == "Windows"
 _IS_DARWIN = platform.system() == "Darwin"
@@ -71,12 +72,12 @@ def _is_mp3(data: bytes) -> bool:
 
 def _play_mp3_windows(data: bytes, wait: bool = False) -> None:
     """Plays MP3 bytes on Windows using built-in winmm MCI."""
-    temp_dir = Path_temp = os.path.join(tempfile.gettempdir(), "agents_voice_last.mp3")
+    path_temp = os.path.join(tempfile.gettempdir(), "agents_voice_last.mp3")
     winmm = ctypes.windll.winmm
     winmm.mciSendStringW("close agents_voice_mp3", None, 0, 0)
-    with open(Path_temp, "wb") as f:
+    with open(path_temp, "wb") as f:
         f.write(data)
-    winmm.mciSendStringW(f'open "{Path_temp}" type mpegvideo alias agents_voice_mp3', None, 0, 0)
+    winmm.mciSendStringW(f'open "{path_temp}" type mpegvideo alias agents_voice_mp3', None, 0, 0)
     flag = "wait" if wait else ""
     winmm.mciSendStringW(f"play agents_voice_mp3 {flag}".strip(), None, 0, 0)
     if wait:
@@ -89,10 +90,13 @@ def play_wav(data: bytes, wait: bool = False) -> None:
         if _is_mp3(data):
             _play_mp3_windows(data, wait=wait)
             return
-        flags = winsound.SND_MEMORY
         if not wait:
-            flags |= winsound.SND_ASYNC
-        winsound.PlaySound(data, flags)
+            path_temp = os.path.join(tempfile.gettempdir(), f"agents_voice_wav_{uuid.uuid4().hex[:8]}.wav")
+            with open(path_temp, "wb") as f:
+                f.write(data)
+            winsound.PlaySound(path_temp, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            return
+        winsound.PlaySound(data, winsound.SND_MEMORY)
         return
 
     # Fallback for macOS / Linux

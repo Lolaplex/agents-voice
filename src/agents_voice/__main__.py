@@ -92,7 +92,7 @@ def main() -> None:
         )
     elif args.subcommand == "test":
         print("Spreche Testphrase...")
-        res = speak("Hallo Felix! agents-voice ist bereit.", wait=True)
+        res = speak("agents-voice ist bereit.", wait=True)
         print(res)
     else:
         serve()

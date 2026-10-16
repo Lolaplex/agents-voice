@@ -5,6 +5,7 @@ __pycache__/
 dist/
 build/
 .cache/
+.pytest_cache/
 .env
 .venv
 .agents/

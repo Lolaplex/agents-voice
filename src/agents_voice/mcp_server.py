@@ -56,6 +56,17 @@ def voice_stop() -> str:
 
 
 @mcp.tool()
+def voice_play_latest() -> str:
+    """Plays the most recent speech summary stored in the voice inbox."""
+    from .inbox import play_latest
+
+    try:
+        return play_latest(wait=False)
+    except Exception as e:
+        return f"Fehler beim Abspielen: {e}"
+
+
+@mcp.tool()
 def voice_status() -> str:
     """Checks the status of the voice output system, active provider, configured keys, and bridge."""
     cfg = load_config()
@@ -64,23 +75,35 @@ def voice_status() -> str:
     configured_providers = [
         p for p in PROVIDER_DEFAULTS if bool(cfg.get_key(p)) or p == "custom"
     ]
+    from .inbox import get_latest_metadata
+
+    latest_meta = get_latest_metadata()
 
     status = {
         "provider": cfg.provider,
         "model": cfg.model,
         "voice": cfg.voice,
+        "mode": cfg.mode,
+        "hotkey": cfg.hotkey,
+        "chime": cfg.chime,
         "region": cfg.azure_region if cfg.provider == "azure" else None,
         "base_url": cfg.base_url or None,
         "has_key": has_active_key,
         "configured_providers": configured_providers,
         "dumbo_hud_bridge_active": dumbo_alive,
         "ready": has_active_key or dumbo_alive,
+        "latest_inbox_message": latest_meta.get("text") if latest_meta else None,
     }
     return json.dumps(status, indent=2)
 
 
 def serve() -> None:
-    """Runs the FastMCP server via stdio transport."""
+    """Runs the FastMCP server via stdio transport and starts the background hotkey listener."""
+    cfg = load_config()
+    if cfg.mode == "inbox":
+        from .hotkey import ensure_hotkey_listener
+
+        ensure_hotkey_listener(cfg.hotkey)
     mcp.run(transport="stdio")
 
 

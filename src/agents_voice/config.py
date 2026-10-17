@@ -68,6 +68,9 @@ class VoiceConfig:
     keys: Dict[str, str] = field(default_factory=dict)
     dumbo_bridge_port: int = 12480
     use_dumbo_bridge_if_available: bool = True
+    mode: str = "inbox"  # "inbox" (save + chime + hotkey play) or "direct" (immediate playback)
+    hotkey: str = "alt+v"
+    chime: bool = True
 
     @property
     def azure_key(self) -> str:
@@ -112,6 +115,9 @@ class VoiceConfig:
             "keys": self.keys,
             "dumbo_bridge_port": self.dumbo_bridge_port,
             "use_dumbo_bridge_if_available": self.use_dumbo_bridge_if_available,
+            "mode": self.mode,
+            "hotkey": self.hotkey,
+            "chime": self.chime,
         }
 
     @classmethod
@@ -134,6 +140,9 @@ class VoiceConfig:
             keys=keys,
             dumbo_bridge_port=int(data.get("dumbo_bridge_port", 12480)),
             use_dumbo_bridge_if_available=bool(data.get("use_dumbo_bridge_if_available", True)),
+            mode=str(data.get("mode", "inbox")).strip().lower(),
+            hotkey=str(data.get("hotkey", "alt+v")).strip().lower(),
+            chime=bool(data.get("chime", True)),
         )
 
 
@@ -204,6 +213,9 @@ def save_config(
     base_url: Optional[str] = None,
     instructions: Optional[str] = None,
     speed: Optional[float] = None,
+    mode: Optional[str] = None,
+    hotkey: Optional[str] = None,
+    chime: Optional[bool] = None,
 ) -> VoiceConfig:
     """Saves updated configuration to ~/.agents/voice.json."""
     config = load_config()
@@ -238,6 +250,12 @@ def save_config(
         config.instructions = instructions.strip()
     if speed is not None:
         config.speed = float(speed)
+    if mode is not None:
+        config.mode = mode.strip().lower()
+    if hotkey is not None:
+        config.hotkey = hotkey.strip().lower()
+    if chime is not None:
+        config.chime = bool(chime)
 
     if key is not None:
         clean_key = key.strip()

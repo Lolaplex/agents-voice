@@ -52,7 +52,7 @@ def speak(
             if send_to_dumbo_bridge(clean_text, cfg.dumbo_bridge_port):
                 return "Spoken via Dumbo Veadio HUD"
 
-    # 2. Standalone synthesis & playback across providers
+    # 2. Standalone synthesis across providers
     prov = cfg.provider.strip().lower()
     if prov == "azure":
         audio_data = synthesize_azure(clean_text, cfg)
@@ -68,8 +68,26 @@ def speak(
             f"Unbekannter Provider '{prov}'. Unterstützt: openrouter, openai, gemini, elevenlabs, azure, custom"
         )
 
-    play_wav(audio_data, wait=wait)
-    return f"Spoken standalone via {prov} ({cfg.model} / {cfg.voice})"
+    # 3. Delivery mode: inbox (silent/chime, play on hotkey) vs direct (immediate playback)
+    from .inbox import save_to_inbox
+
+    save_to_inbox(
+        audio_data=audio_data,
+        text=clean_text,
+        provider=prov,
+        model=cfg.model,
+        voice=cfg.voice,
+        play_chime=cfg.chime,
+    )
+
+    if cfg.mode == "direct" or wait:
+        play_wav(audio_data, wait=wait)
+        return f"Spoken directly via {prov} ({cfg.model} / {cfg.voice})"
+
+    return (
+        f"In Mailbox gespeichert ({prov} {cfg.model}/{cfg.voice}). "
+        f"Drücke {cfg.hotkey.upper()} zum Anhören."
+    )
 
 
 def stop(config: Optional[VoiceConfig] = None) -> str:

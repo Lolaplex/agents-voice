@@ -52,6 +52,23 @@ def main() -> None:
     config_p.add_argument("--base-url", dest="base_url", help="Custom OpenAI-compatible base URL")
     config_p.add_argument("--instructions", help="Tone/style instructions for steerable TTS models")
     config_p.add_argument("--speed", type=float, help="Speech rate multiplier (e.g. 1.0)")
+    config_p.add_argument(
+        "--mode",
+        choices=["inbox", "direct"],
+        help="Delivery mode: 'inbox' (silent + chime + hotkey play) or 'direct' (speak immediately)",
+    )
+    config_p.add_argument("--hotkey", help="Global Windows shortcut to play latest message (e.g. alt+v)")
+    config_p.add_argument(
+        "--chime",
+        type=lambda v: str(v).lower() in ("1", "true", "yes", "on"),
+        help="Enable/disable chime when new message arrives (true/false)",
+    )
+
+    # play (play latest message)
+    subparsers.add_parser("play", help="Play the latest voice message stored in the mailbox")
+
+    # listen (run background hotkey daemon)
+    subparsers.add_parser("listen", help="Run background hotkey daemon listening for global shortcut")
 
     # test
     subparsers.add_parser("test", help="Play a quick test speech sample")
@@ -70,6 +87,24 @@ def main() -> None:
             voice=args.voice,
         )
         print(res)
+    elif args.subcommand == "play":
+        from .inbox import play_latest
+
+        res = play_latest(wait=True)
+        print(res)
+    elif args.subcommand == "listen":
+        from .config import load_config
+        from .hotkey import ensure_hotkey_listener
+        import time
+
+        cfg = load_config()
+        print(f"agents-voice lauscht auf globalen Hotkey [{cfg.hotkey.upper()}]...")
+        ensure_hotkey_listener(cfg.hotkey)
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nBeendet.")
     elif args.subcommand == "stop":
         res = stop()
         print(res)
@@ -85,10 +120,13 @@ def main() -> None:
             base_url=args.base_url,
             instructions=args.instructions,
             speed=args.speed,
+            mode=args.mode,
+            hotkey=args.hotkey,
+            chime=args.chime,
         )
         print(
             f"Konfiguration gespeichert: Provider={cfg.provider}, "
-            f"Model={cfg.model}, Voice={cfg.voice}"
+            f"Model={cfg.model}, Voice={cfg.voice}, Mode={cfg.mode}, Hotkey={cfg.hotkey}"
         )
     elif args.subcommand == "test":
         print("Spreche Testphrase...")

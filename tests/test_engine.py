@@ -25,12 +25,22 @@ class TestEngine(unittest.TestCase):
     @patch("agents_voice.engine.play_wav")
     def test_speak_standalone_azure(self, mock_play, mock_synth, mock_check):
         mock_synth.return_value = b"RIFFfakeaudio"
-        cfg = VoiceConfig(provider="azure", keys={"azure": "fake-key"})
+        cfg = VoiceConfig(provider="azure", mode="direct", keys={"azure": "fake-key"})
 
         res = speak("Testing standalone", config=cfg, wait=False)
-        self.assertIn("Spoken standalone via azure", res)
+        self.assertIn("Spoken directly via azure", res)
         mock_synth.assert_called_once()
         mock_play.assert_called_once_with(b"RIFFfakeaudio", wait=False)
+
+    @patch("agents_voice.engine.check_dumbo_bridge_alive", return_value=False)
+    @patch("agents_voice.engine.synthesize_azure")
+    def test_speak_inbox_mode(self, mock_synth, mock_check):
+        mock_synth.return_value = b"RIFFfakeaudio"
+        cfg = VoiceConfig(provider="azure", mode="inbox", hotkey="alt+v", keys={"azure": "fake-key"})
+
+        res = speak("Testing inbox", config=cfg, wait=False)
+        self.assertIn("In Mailbox gespeichert", res)
+        self.assertIn("ALT+V", res)
 
     @patch("agents_voice.engine.stop_playback")
     def test_stop(self, mock_stop_playback):

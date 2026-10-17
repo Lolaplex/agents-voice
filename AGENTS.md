@@ -9,13 +9,16 @@
 
 ## Commands
 - Test status: `python -m agents_voice status`
-- Configure: `python -m agents_voice config --key <key> --region swedencentral --voice de-DE-Seraphina:DragonHDLatestNeural`
+- Configure: `python -m agents_voice config --mode inbox --hotkey alt+v --chime true`
+- Play latest message: `python -m agents_voice play`
+- Run global hotkey daemon: `python -m agents_voice listen`
 - Speak phrase: `python -m agents_voice speak "Voice output ready"`
 - Test audio: `python -m agents_voice test`
 - Stop playback: `python -m agents_voice stop`
 - Start FastMCP: `python -m agents_voice serve`
 
 ## Tools
-- `voice_speak(message: str)`: Synthesize and play 1-2 sentences spoken summary.
+- `voice_speak(message: str)`: Synthesize speech and store in mailbox (or play directly).
+- `voice_play_latest()`: Play the most recent speech message from the mailbox.
 - `voice_stop()`: Immediate audio cutoff.
-- `voice_status()`: Report readiness, provider, and bridge state.
+- `voice_status()`: Report readiness, provider, mode, hotkey, and bridge state.

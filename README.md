@@ -1,7 +1,7 @@
 <h1 align="center">agents-voice</h1>
 
 <p align="center">
-  <a href="https://github.com/Lolaplex/agents-voice/releases"><img src="https://img.shields.io/badge/version-0.0.1-blue.svg?style=flat-square" alt="Version 0.0.1"></a>
+  <a href="https://github.com/Lolaplex/agents-voice/releases"><img src="https://img.shields.io/badge/version-0.1.0-blue.svg?style=flat-square" alt="Version 0.1.0"></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-Standard-orange.svg?style=flat-square" alt="MCP"></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
   <a href="https://pypi.org/project/agents-voice/"><img src="https://img.shields.io/pypi/v/agents-voice.svg?style=flat-square" alt="PyPI"></a>
@@ -99,9 +99,10 @@ Add to your MCP configuration (e.g. `~/.cursor/mcp.json`, `~/.agents/mcp.json`, 
 
 | Tool | Description |
 | :--- | :--- |
-| `voice_speak(message, provider?, model?, voice?)` | Synthesizes and plays a concise 1–2 sentence spoken summary directly to the user. |
+| `voice_speak(message, provider?, model?, voice?)` | Synthesizes and plays or buffers a concise 1–2 sentence spoken summary directly to the user. |
+| `voice_play_latest()` | Plays the most recent speech summary stored in the voice inbox. |
 | `voice_stop()` | Immediately terminates any currently playing speech audio. |
-| `voice_status()` | Reports backend status, configured providers, active voice, and bridge availability. |
+| `voice_status()` | Reports backend status, configured providers, active voice, mode, and bridge availability. |
 
 ---
 
@@ -112,10 +113,12 @@ Add to your MCP configuration (e.g. `~/.cursor/mcp.json`, `~/.agents/mcp.json`, 
 | `agents-voice speak "Text to speak"` | Speaks text directly via the active provider. |
 | `agents-voice speak --wait "Text"` | Speaks text and waits until playback finishes. |
 | `agents-voice test` | Plays a quick test speech sample to verify audio output. |
+| `agents-voice play` | Plays the latest voice message stored in the mailbox. |
+| `agents-voice listen` | Runs the background hotkey daemon listening for the global shortcut (e.g. `Alt+V`). |
 | `agents-voice stop` | Cuts off any running audio playback immediately. |
 | `agents-voice status` | Prints active provider configuration and status JSON. |
-| `agents-voice config [options]` | Updates provider, model, voice, speed, region, or API keys. |
-| `agents-voice serve` | Runs the FastMCP server via stdio transport. |
+| `agents-voice config [options]` | Updates provider, model, voice, speed, region, mode, hotkey, chime, or API keys. |
+| `agents-voice serve` | Runs the FastMCP server via stdio transport and launches hotkey listener if in inbox mode. |
 
 ---
 

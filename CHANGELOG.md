@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.1] - 2026-10-16
+## [0.1.0] - 2026-10-21
+
+### Added
+- Voice inbox delivery mode (`--mode inbox` vs `--mode direct`) to buffer speech summaries and prevent unexpected loud audio interruptions.
+- Global background hotkey daemon (`agents-voice listen`) to play the latest buffered message on demand (e.g. `Alt+V`).
+- FastMCP tool `voice_play_latest()` and CLI command `agents-voice play` to trigger inbox replay.
+- Subtle system chime notification (`--chime true`) alerting the user when an agent completes a task without speaking immediately.
+
+## [0.0.1] - 2026-10-16 - 2026-10-16
 
 ### Added
 - FastMCP stdio server exposing `voice_speak`, `voice_stop`, and `voice_status` tools.

@@ -55,46 +55,17 @@ jobs:
             echo "::warning::RELEASE_WEBHOOK_URL unset; skip notification"
             exit 0
           fi
-          python3 -c "
-          import os, json, urllib.request
-          tag = os.environ.get('GITHUB_REF_NAME', '')
-          repo = os.environ['GITHUB_REPOSITORY']
-          release_url = f\"https://github.com/{repo}/releases/tag/{tag}\"
-          
-          payload = {
-              'embeds': [{
-                  'title': f\"🚀 Release {tag} Published!\",
-                  'description': f\"**{repo}** release is live on GitHub Releases.\",
-                  'url': release_url,
-                  'color': 3447003
-              }]
-          }
-          req = urllib.request.Request(os.environ['WEBHOOK_URL'], 
-                                       data=json.dumps(payload).encode(), 
-                                       headers={'Content-Type': 'application/json', 'User-Agent': 'GitHub-Actions'})
-          urllib.request.urlopen(req)
-          "
+          PAYLOAD=$(python3 -c "import json, os; tag=os.environ.get('GITHUB_REF_NAME', ''); repo=os.environ['GITHUB_REPOSITORY']; server=os.environ['GITHUB_SERVER_URL']; repo_url=f'{server}/{repo}'; release_url=f'{server}/{repo}/releases/tag/{tag}'; print(json.dumps({'embeds':[{'title':f'🚀 Release {tag} Published! — {repo}','url':release_url,'description':f'**{repo}** release is live on GitHub Releases.\\n[View release]({release_url}) · [Repository]({repo_url})','color':3447003}]}))")
+          curl -fsS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$WEBHOOK_URL"
 
       - name: Notify Release Failure
         if: failure()
         env:
           WEBHOOK_URL: ${{ secrets.CI_WEBHOOK_URL }}
         run: |
-          if [ -n "$WEBHOOK_URL" ]; then
-            python3 -c "
-            import os, json, urllib.request
-            tag = os.environ.get('GITHUB_REF_NAME', '')
-            payload = {
-                'embeds': [{
-                    'title': f\"🚨 Release Failed: {os.environ['GITHUB_REPOSITORY']}\",
-                    'description': f\"Failed to create release \`{tag}\` on GitHub.\",
-                    'url': f\"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}\",
-                    'color': 15158332
-                }]
-            }
-            req = urllib.request.Request(os.environ['WEBHOOK_URL'], 
-                                         data=json.dumps(payload).encode(), 
-                                         headers={'Content-Type': 'application/json', 'User-Agent': 'GitHub-Actions'})
-            urllib.request.urlopen(req)
-            "
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::warning::CI_WEBHOOK_URL unset; skip notification"
+            exit 0
           fi
+          PAYLOAD=$(python3 -c "import json, os; tag=os.environ.get('GITHUB_REF_NAME', ''); repo=os.environ['GITHUB_REPOSITORY']; server=os.environ['GITHUB_SERVER_URL']; repo_url=f'{server}/{repo}'; run_url=f'{server}/{repo}/actions/runs/{os.environ[\"GITHUB_RUN_ID\"]}'; print(json.dumps({'embeds':[{'title':f'🚨 Release Failed: {repo}','url':run_url,'description':f'Failed to create release \`{tag}\` on GitHub.\\n[View run]({run_url}) · [Repository]({repo_url})','color':15158332}]}))")
+          curl -fsS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$WEBHOOK_URL"

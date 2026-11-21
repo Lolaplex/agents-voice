@@ -5,7 +5,7 @@
 - **Separation of Concerns**: Diffs, code, and file listings belong on screen in markdown. Voice is exclusively for concise, natural 1-2 sentence spoken summaries (`voice_speak`).
 - **Zero Heavy Dependencies**: Pure Python standard library (`urllib.request`, `winsound` on Windows) + `mcp>=1.0.0,<2`. No ffmpeg, no Pygame, no heavy C libraries.
 - **Standalone with HUD Synergy**: Plays directly through OS audio when standalone. If Dumbo desktop overlay is running (`127.0.0.1:12480`), optionally routes through Dumbo's Veadio HUD for synchronized word highlighting.
-- **Local Configuration**: Stored in `~/.agents/voice.json` with fallback discovery from environment and existing Dumbo settings.
+- **Local Configuration**: Stored at the host root (`<host>/voice.json`, default `~/.agents/voice.json`) next to `mcp.json`/`secrets.json` — resolved via `agents-workspace`, `AGENTS_VOICE_CONFIG` overrides. The transient speech spool lives under `<host>/run/voice_inbox/` (`AGENTS_VOICE_INBOX` overrides).
 
 ## Commands
 - Test status: `python -m agents_voice status`

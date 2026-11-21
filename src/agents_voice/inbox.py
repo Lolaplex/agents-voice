@@ -15,9 +15,22 @@ _IS_WINDOWS = platform.system() == "Windows"
 if _IS_WINDOWS:
     import winsound
 
-INBOX_DIR = Path.home() / ".agents" / "voice_inbox"
-AUDIO_FILE = INBOX_DIR / "latest.audio"
-META_FILE = INBOX_DIR / "latest.json"
+def _inbox_dir() -> Path:
+    """Transient spool under <host>/run/ — audio artifacts are runtime
+    state, not workspace data. AGENTS_VOICE_INBOX overrides for tests."""
+    override = os.environ.get("AGENTS_VOICE_INBOX")
+    if override:
+        return Path(override)
+    from agents_workspace import Host
+    return Host.from_env().run / "voice_inbox"
+
+
+def _audio_file() -> Path:
+    return _inbox_dir() / "latest.audio"
+
+
+def _meta_file() -> Path:
+    return _inbox_dir() / "latest.json"
 
 
 def save_to_inbox(
@@ -29,8 +42,9 @@ def save_to_inbox(
     play_chime: bool = True,
 ) -> None:
     """Saves generated speech audio and metadata into the local voice inbox."""
-    INBOX_DIR.mkdir(parents=True, exist_ok=True)
-    AUDIO_FILE.write_bytes(audio_data)
+    inbox = _inbox_dir()
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / "latest.audio").write_bytes(audio_data)
 
     meta = {
         "text": text,
@@ -40,7 +54,7 @@ def save_to_inbox(
         "timestamp": time.time(),
         "played": False,
     }
-    META_FILE.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    _meta_file().write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
     if play_chime:
         trigger_chime()
@@ -57,9 +71,10 @@ def trigger_chime() -> None:
 
 def get_latest_metadata() -> Optional[dict]:
     """Retrieves metadata of the most recent voice message."""
-    if META_FILE.is_file():
+    meta_file = _meta_file()
+    if meta_file.is_file():
         try:
-            return json.loads(META_FILE.read_text(encoding="utf-8"))
+            return json.loads(meta_file.read_text(encoding="utf-8"))
         except Exception:
             pass
     return None
@@ -67,10 +82,11 @@ def get_latest_metadata() -> Optional[dict]:
 
 def play_latest(wait: bool = False) -> str:
     """Plays the latest audio message from the voice inbox."""
-    if not AUDIO_FILE.is_file():
+    audio_file = _audio_file()
+    if not audio_file.is_file():
         return "Keine Sprachnachricht in der Mailbox vorhanden."
 
-    data = AUDIO_FILE.read_bytes()
+    data = audio_file.read_bytes()
     if not data:
         return "Mailbox-Datei ist leer."
 
@@ -82,7 +98,7 @@ def play_latest(wait: bool = False) -> str:
     # Mark as played in metadata
     meta["played"] = True
     try:
-        META_FILE.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+        _meta_file().write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
 

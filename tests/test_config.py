@@ -50,8 +50,8 @@ class TestVoiceConfig(unittest.TestCase):
     def test_save_and_load_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "voice.json"
-            with patch("agents_voice.config.CONFIG_FILE", test_file), patch(
-                "agents_voice.config.CONFIG_DIR", Path(tmpdir)
+            with patch.dict(
+                "os.environ", {"AGENTS_VOICE_CONFIG": str(test_file)}
             ):
                 saved = save_config(
                     provider="openai",

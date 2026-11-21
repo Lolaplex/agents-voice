@@ -8,8 +8,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
 
-CONFIG_DIR = Path.home() / ".agents"
-CONFIG_FILE = CONFIG_DIR / "voice.json"
+def config_file() -> Path:
+    """voice.json lives on the host root next to mcp.json/secrets.json —
+    provider keys are host infra, not workspace data. AGENTS_VOICE_CONFIG
+    overrides for tests and standalone use."""
+    override = os.environ.get("AGENTS_VOICE_CONFIG")
+    if override:
+        return Path(override)
+    from agents_workspace import Host
+    return Host.from_env().dir / "voice.json"
 
 PROVIDER_DEFAULTS = {
     "azure": {
@@ -173,9 +180,10 @@ def load_config() -> VoiceConfig:
     """Loads configuration from ~/.agents/voice.json with env and Dumbo fallbacks."""
     config = VoiceConfig()
 
-    if CONFIG_FILE.is_file():
+    cfg_file = config_file()
+    if cfg_file.is_file():
         try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            data = json.loads(cfg_file.read_text(encoding="utf-8"))
             config = VoiceConfig.from_dict(data)
         except Exception:
             pass
@@ -261,6 +269,7 @@ def save_config(
         clean_key = key.strip()
         config.keys[config.provider] = clean_key
 
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
+    cfg_file = config_file()
+    cfg_file.parent.mkdir(parents=True, exist_ok=True)
+    cfg_file.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
     return config

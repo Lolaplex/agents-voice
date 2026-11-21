@@ -18,11 +18,20 @@ if _IS_WINDOWS:
 def _inbox_dir() -> Path:
     """Transient spool under <host>/run/ — audio artifacts are runtime
     state, not workspace data. AGENTS_VOICE_INBOX overrides for tests."""
-    override = os.environ.get("AGENTS_VOICE_INBOX")
+    override = os.environ.get("AGENTS_VOICE_INBOX", "").strip()
     if override:
         return Path(override)
-    from agents_workspace import Host
-    return Host.from_env().run / "voice_inbox"
+    try:
+        from agents_workspace import Host
+
+        return Host.from_env().run / "voice_inbox"
+    except ImportError:
+        voice_dir = os.environ.get("AGENTS_VOICE_DIR", "").strip()
+        if voice_dir:
+            return Path(voice_dir).expanduser() / "voice_inbox"
+        host_raw = os.environ.get("AGENTS_HOST_DIR", "").strip()
+        base = Path(host_raw).expanduser() if host_raw else Path.home() / ".agents"
+        return base / "run" / "voice_inbox"
 
 
 def _audio_file() -> Path:

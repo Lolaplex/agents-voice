@@ -4,9 +4,25 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
+
+try:
+    from agents_workspace import Host, delete_secret, resolve_secret, write_secret
+except ImportError:
+    Host = None  # type: ignore[assignment]
+    delete_secret = None  # type: ignore[assignment]
+    resolve_secret = None  # type: ignore[assignment]
+    write_secret = None  # type: ignore[assignment]
+
+
+def _fallback_host_dir() -> Path:
+    raw = os.environ.get("AGENTS_HOST_DIR", "").strip()
+    return Path(raw).expanduser() if raw else Path.home() / ".agents"
+
 
 def config_file() -> Path:
     """voice.json lives on the host root next to mcp.json/secrets.json —
@@ -15,8 +31,40 @@ def config_file() -> Path:
     override = os.environ.get("AGENTS_VOICE_CONFIG")
     if override:
         return Path(override)
-    from agents_workspace import Host
-    return Host.from_env().dir / "voice.json"
+    if Host is not None:
+        return Host.from_env().dir / "voice.json"
+    return _fallback_host_dir() / "voice.json"
+
+
+PROVIDER_KEY_ENVS: Dict[str, Tuple[str, ...]] = {
+    "azure": ("AZURE_SPEECH_KEY", "AZURE_TTS_KEY"),
+    "openrouter": ("OPENROUTER_API_KEY",),
+    "openai": ("OPENAI_API_KEY",),
+    "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "elevenlabs": ("ELEVENLABS_API_KEY", "XI_API_KEY"),
+    "custom": ("CUSTOM_TTS_KEY", "OPENAI_API_KEY"),
+}
+
+
+def _provider_secret_names(provider: str) -> Tuple[str, ...]:
+    prov = (provider or "").strip().lower()
+    if prov in PROVIDER_KEY_ENVS:
+        return PROVIDER_KEY_ENVS[prov]
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", prov).strip("_").upper() or "CUSTOM"
+    return (f"{slug}_TTS_KEY",)
+
+
+def _resolve_secret_value(key: str) -> str:
+    if resolve_secret is not None:
+        return resolve_secret(key, scope="host").strip()
+    return os.environ.get(key, "").strip()
+
+
+def _vault_has_secret(key: str) -> bool:
+    if resolve_secret is None:
+        return False
+    env_no_key = {k: v for k, v in os.environ.items() if k != key}
+    return bool(resolve_secret(key, env=env_no_key, scope="host").strip())
 
 PROVIDER_DEFAULTS = {
     "azure": {
@@ -85,21 +133,13 @@ class VoiceConfig:
 
     def get_key(self, provider: Optional[str] = None) -> str:
         prov = (provider or self.provider).strip().lower()
-        # 1. Explicit keys dict
-        if prov in self.keys and self.keys[prov].strip():
-            return self.keys[prov].strip()
+        # 1. Explicit in-memory keys dict / 1-release legacy voice.json["keys"] fallback
+        if prov in self.keys and str(self.keys[prov]).strip():
+            return str(self.keys[prov]).strip()
 
-        # 2. Environment variables
-        env_map = {
-            "azure": ["AZURE_SPEECH_KEY", "AZURE_TTS_KEY"],
-            "openrouter": ["OPENROUTER_API_KEY"],
-            "openai": ["OPENAI_API_KEY"],
-            "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-            "elevenlabs": ["ELEVENLABS_API_KEY", "XI_API_KEY"],
-            "custom": ["CUSTOM_TTS_KEY", "OPENAI_API_KEY"],
-        }
-        for env_name in env_map.get(prov, []):
-            val = os.environ.get(env_name, "").strip()
+        # 2. Host Secret Vault (ENV > /run/secrets > keyring > host.json), or os.environ fallback
+        for env_name in _provider_secret_names(prov):
+            val = _resolve_secret_value(env_name)
             if val:
                 return val
 
@@ -119,7 +159,6 @@ class VoiceConfig:
             "azure_region": self.azure_region,
             "base_url": self.base_url,
             "instructions": self.instructions,
-            "keys": self.keys,
             "dumbo_bridge_port": self.dumbo_bridge_port,
             "use_dumbo_bridge_if_available": self.use_dumbo_bridge_if_available,
             "mode": self.mode,
@@ -131,7 +170,16 @@ class VoiceConfig:
     def from_dict(cls, data: dict) -> VoiceConfig:
         prov = str(data.get("provider", "azure")).strip().lower()
         defaults = PROVIDER_DEFAULTS.get(prov, PROVIDER_DEFAULTS["azure"])
-        keys = dict(data.get("keys") or {})
+        raw_keys = data.get("keys")
+        keys = (
+            {
+                str(k).strip().lower(): str(v).strip()
+                for k, v in raw_keys.items()
+                if isinstance(v, str) and v.strip()
+            }
+            if isinstance(raw_keys, dict)
+            else {}
+        )
         legacy_azure_key = str(data.get("azure_key", "")).strip()
         if legacy_azure_key and "azure" not in keys:
             keys["azure"] = legacy_azure_key
@@ -265,9 +313,40 @@ def save_config(
     if chime is not None:
         config.chime = bool(chime)
 
+    if write_secret is not None:
+        # Migrate legacy voice.json["keys"] into host vault if not already stored
+        for legacy_prov, legacy_val in list(config.keys.items()):
+            clean_legacy = str(legacy_val or "").strip()
+            if not clean_legacy:
+                continue
+            if key is not None and legacy_prov == config.provider:
+                continue
+            secret_names = _provider_secret_names(legacy_prov)
+            if not any(_vault_has_secret(name) for name in secret_names):
+                write_secret(secret_names[0], clean_legacy, scope="host")
+        config.keys.clear()
+
     if key is not None:
         clean_key = key.strip()
-        config.keys[config.provider] = clean_key
+        secret_names = _provider_secret_names(config.provider)
+        if write_secret is not None:
+            if clean_key:
+                write_secret(secret_names[0], clean_key, scope="host")
+            elif delete_secret is not None:
+                for name in secret_names:
+                    delete_secret(name, scope="host")
+            config.keys.pop(config.provider, None)
+        else:
+            warnings.warn(
+                f"agents-workspace is not installed; cannot persist {secret_names[0]} "
+                "to host vault (set it in the environment instead)",
+                UserWarning,
+                stacklevel=2,
+            )
+            if clean_key:
+                config.keys[config.provider] = clean_key
+            else:
+                config.keys.pop(config.provider, None)
 
     cfg_file = config_file()
     cfg_file.parent.mkdir(parents=True, exist_ok=True)

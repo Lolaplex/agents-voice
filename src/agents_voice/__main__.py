@@ -3,10 +3,149 @@
 from __future__ import annotations
 
 import argparse
+import json
 
+from . import __version__
 from .config import save_config
 from .engine import speak, stop
 from .mcp_server import serve, voice_status
+
+CLASSIFICATION = {
+    "field": "side_effects",
+    "enum": ["read-only", "mutating"],
+    "boolean_field": "mutates",
+    "annotation": "annotations.readOnlyHint",
+    "missing": "mutating",
+    "description": (
+        "Read commands[name].side_effects. "
+        "Missing side_effects metadata means mutating. "
+        "Do not infer the class from the command name. "
+        "host_local marks commands that drive this host's audio device, "
+        "hotkeys, inbox spool, or host config."
+    ),
+}
+
+
+def _cmd(
+    usage: str,
+    description: str,
+    side_effects: str,
+    *,
+    host_local: bool,
+    parameters: dict | None = None,
+) -> dict:
+    read_only = side_effects == "read-only"
+    spec = {
+        "usage": usage,
+        "description": description,
+        "side_effects": side_effects,
+        "mutates": not read_only,
+        "annotations": {
+            "readOnlyHint": read_only,
+            "destructiveHint": not read_only,
+            "idempotentHint": read_only,
+            "openWorldHint": False,
+        },
+        "host_local": host_local,
+    }
+    if parameters:
+        spec["parameters"] = parameters
+    return spec
+
+
+def _obj(props: dict, required: list | None = None) -> dict:
+    out = {"type": "object", "properties": props}
+    if required:
+        out["required"] = required
+    return out
+
+
+def help_json() -> dict:
+    s = {"type": "string"}
+    b = {"type": "boolean"}
+    return {
+        "name": "agents-voice",
+        "version": __version__,
+        "cordis_expose": True,
+        "description": "Multi-provider speech output MCP server and CLI for AI coding agents.",
+        "classification": CLASSIFICATION,
+        "commands": {
+            "serve": _cmd(
+                "agents-voice serve",
+                "Run the FastMCP server via stdio transport",
+                "mutating",
+                host_local=True,
+            ),
+            "speak": _cmd(
+                "agents-voice speak TEXT [--wait] [--provider P] [--model M] [--voice V]",
+                "Speak text directly through the host audio device",
+                "mutating",
+                host_local=True,
+                parameters=_obj(
+                    {
+                        "text": {**s, "description": "The text to speak"},
+                        "wait": {**b, "description": "Wait until audio finishes playing"},
+                        "provider": {**s, "description": "Provider override (openrouter, openai, gemini, elevenlabs, azure, custom)"},
+                        "model": {**s, "description": "Model override"},
+                        "voice": {**s, "description": "Voice override"},
+                    },
+                    ["text"],
+                ),
+            ),
+            "stop": _cmd(
+                "agents-voice stop",
+                "Stop currently playing audio on the host",
+                "mutating",
+                host_local=True,
+            ),
+            "status": _cmd(
+                "agents-voice status",
+                "Show current voice configuration and backend status",
+                "read-only",
+                host_local=True,
+            ),
+            "config": _cmd(
+                "agents-voice config [--provider P] [--key K] [--model M] [--voice V] [--region R] [--base-url U] [--instructions I] [--speed N] [--mode MODE] [--hotkey K] [--chime B]",
+                "Write <host>/voice.json: provider, model, voice, credentials, mode, hotkey, chime",
+                "mutating",
+                host_local=True,
+                parameters=_obj(
+                    {
+                        "provider": s,
+                        "key": s,
+                        "model": s,
+                        "voice": s,
+                        "region": {**s, "description": "Azure Speech region"},
+                        "base_url": {**s, "description": "Custom OpenAI-compatible base URL"},
+                        "instructions": s,
+                        "speed": {"type": "number", "description": "Speech rate multiplier"},
+                        "mode": {**s, "description": "inbox | direct"},
+                        "hotkey": {**s, "description": "Global Windows shortcut (e.g. alt+v)"},
+                        "chime": {**b, "description": "Chime when a new message arrives"},
+                    }
+                ),
+            ),
+            "play": _cmd(
+                "agents-voice play",
+                "Play the latest voice message stored in the mailbox on the host",
+                "mutating",
+                host_local=True,
+            ),
+            "listen": _cmd(
+                "agents-voice listen",
+                "Run background hotkey daemon listening for the global shortcut",
+                "mutating",
+                host_local=True,
+            ),
+            "test": _cmd(
+                "agents-voice test",
+                "Play a quick test speech sample on the host",
+                "mutating",
+                host_local=True,
+            ),
+        },
+        "flags": ["--help-json"],
+    }
 
 
 def main() -> None:
@@ -14,6 +153,7 @@ def main() -> None:
         prog="agents-voice",
         description="Fast, minimal multi-provider speech output MCP server and CLI for AI coding agents.",
     )
+    parser.add_argument("--help-json", action="store_true", help="Emit machine-readable CLI spec as JSON.")
     subparsers = parser.add_subparsers(dest="subcommand", help="Subcommand to run")
 
     # serve
@@ -74,6 +214,10 @@ def main() -> None:
     subparsers.add_parser("test", help="Play a quick test speech sample")
 
     args = parser.parse_args()
+
+    if args.help_json:
+        print(json.dumps(help_json(), indent=2))
+        return
 
     if args.subcommand == "serve":
         serve()

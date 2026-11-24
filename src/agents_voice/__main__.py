@@ -104,36 +104,9 @@ def help_json() -> dict:
                 "read-only",
                 host_local=True,
             ),
-            "config": _cmd(
-                "agents-voice config [--provider P] [--key K] [--model M] [--voice V] [--region R] [--base-url U] [--instructions I] [--speed N] [--mode MODE] [--hotkey K] [--chime B]",
-                "Write <host>/voice.json: provider, model, voice, credentials, mode, hotkey, chime",
-                "mutating",
-                host_local=True,
-                parameters=_obj(
-                    {
-                        "provider": s,
-                        "key": s,
-                        "model": s,
-                        "voice": s,
-                        "region": {**s, "description": "Azure Speech region"},
-                        "base_url": {**s, "description": "Custom OpenAI-compatible base URL"},
-                        "instructions": s,
-                        "speed": {"type": "number", "description": "Speech rate multiplier"},
-                        "mode": {**s, "description": "inbox | direct"},
-                        "hotkey": {**s, "description": "Global Windows shortcut (e.g. alt+v)"},
-                        "chime": {**b, "description": "Chime when a new message arrives"},
-                    }
-                ),
-            ),
             "play": _cmd(
                 "agents-voice play",
                 "Play the latest voice message stored in the mailbox on the host",
-                "mutating",
-                host_local=True,
-            ),
-            "listen": _cmd(
-                "agents-voice listen",
-                "Run background hotkey daemon listening for the global shortcut",
                 "mutating",
                 host_local=True,
             ),
@@ -148,7 +121,7 @@ def help_json() -> dict:
     }
 
 
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agents-voice",
         description="Fast, minimal multi-provider speech output MCP server and CLI for AI coding agents.",
@@ -200,7 +173,8 @@ def main() -> None:
     config_p.add_argument("--hotkey", help="Global Windows shortcut to play latest message (e.g. alt+v)")
     config_p.add_argument(
         "--chime",
-        type=lambda v: str(v).lower() in ("1", "true", "yes", "on"),
+        type=str.lower,
+        choices=["true", "false"],
         help="Enable/disable chime when new message arrives (true/false)",
     )
 
@@ -213,6 +187,11 @@ def main() -> None:
     # test
     subparsers.add_parser("test", help="Play a quick test speech sample")
 
+    return parser
+
+
+def main() -> None:
+    parser = _build_parser()
     args = parser.parse_args()
 
     if args.help_json:
@@ -266,7 +245,7 @@ def main() -> None:
             speed=args.speed,
             mode=args.mode,
             hotkey=args.hotkey,
-            chime=args.chime,
+            chime=args.chime == "true" if args.chime is not None else None,
         )
         print(
             f"Konfiguration gespeichert: Provider={cfg.provider}, "

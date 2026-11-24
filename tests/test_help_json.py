@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
 import unittest
 
-from agents_voice.__main__ import CLASSIFICATION, help_json
+from agents_voice.__main__ import CLASSIFICATION, _build_parser, help_json
 
 
 class HelpJsonTests(unittest.TestCase):
@@ -28,10 +29,35 @@ class HelpJsonTests(unittest.TestCase):
 
     def test_tts_inbox_hotkey_commands_host_local(self) -> None:
         commands = help_json()["commands"]
-        for name in ("speak", "play", "listen", "test", "stop", "config", "serve"):
+        for name in ("speak", "play", "test", "stop", "serve"):
             with self.subTest(command=name):
                 self.assertTrue(commands[name]["host_local"], name)
         self.assertEqual(commands["status"]["side_effects"], "read-only")
+
+    def test_host_config_commands_hidden(self) -> None:
+        commands = help_json()["commands"]
+        for name in ("config", "listen"):
+            with self.subTest(command=name):
+                self.assertNotIn(name, commands)
+
+    def test_commands_match_argparse_subparsers(self) -> None:
+        subs = next(
+            a for a in _build_parser()._actions
+            if isinstance(a, argparse._SubParsersAction)
+        )
+        exposed = set(help_json()["commands"])
+        declared = set(subs.choices)
+        self.assertTrue(exposed <= declared)
+        self.assertEqual(declared - exposed, {"config", "listen"})
+
+    def test_chime_argparse_accepts_enum(self) -> None:
+        parser = _build_parser()
+        for v in ("true", "false"):
+            with self.subTest(chime=v):
+                args = parser.parse_args(["config", "--chime", v])
+                self.assertEqual(args.chime, v)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["config", "--chime"])
 
     def test_help_json_subprocess(self) -> None:
         proc = subprocess.run(

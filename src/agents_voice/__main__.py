@@ -3,17 +3,130 @@
 from __future__ import annotations
 
 import argparse
+import json
 
+from . import __version__
 from .config import save_config
 from .engine import speak, stop
 from .mcp_server import serve, voice_status
 
+CLASSIFICATION = {
+    "field": "side_effects",
+    "enum": ["read-only", "mutating"],
+    "boolean_field": "mutates",
+    "annotation": "annotations.readOnlyHint",
+    "missing": "mutating",
+    "description": (
+        "Read commands[name].side_effects. "
+        "Missing side_effects metadata means mutating. "
+        "Do not infer the class from the command name. "
+        "host_local marks commands that drive this host's audio device, "
+        "hotkeys, inbox spool, or host config."
+    ),
+}
 
-def main() -> None:
+
+def _cmd(
+    usage: str,
+    description: str,
+    side_effects: str,
+    *,
+    host_local: bool,
+    parameters: dict | None = None,
+) -> dict:
+    read_only = side_effects == "read-only"
+    spec = {
+        "usage": usage,
+        "description": description,
+        "side_effects": side_effects,
+        "mutates": not read_only,
+        "annotations": {
+            "readOnlyHint": read_only,
+            "destructiveHint": not read_only,
+            "idempotentHint": read_only,
+            "openWorldHint": False,
+        },
+        "host_local": host_local,
+    }
+    if parameters:
+        spec["parameters"] = parameters
+    return spec
+
+
+def _obj(props: dict, required: list | None = None) -> dict:
+    out = {"type": "object", "properties": props}
+    if required:
+        out["required"] = required
+    return out
+
+
+def help_json() -> dict:
+    s = {"type": "string"}
+    b = {"type": "boolean"}
+    return {
+        "name": "agents-voice",
+        "version": __version__,
+        "cordis_expose": True,
+        "description": "Multi-provider speech output MCP server and CLI for AI coding agents.",
+        "classification": CLASSIFICATION,
+        "commands": {
+            "serve": _cmd(
+                "agents-voice serve",
+                "Run the FastMCP server via stdio transport",
+                "mutating",
+                host_local=True,
+            ),
+            "speak": _cmd(
+                "agents-voice speak TEXT [--wait] [--provider P] [--model M] [--voice V]",
+                "Speak text directly through the host audio device",
+                "mutating",
+                host_local=True,
+                parameters=_obj(
+                    {
+                        "text": {**s, "description": "The text to speak"},
+                        "wait": {**b, "description": "Wait until audio finishes playing"},
+                        "provider": {**s, "description": "Provider override (openrouter, openai, gemini, elevenlabs, azure, custom)"},
+                        "model": {**s, "description": "Model override"},
+                        "voice": {**s, "description": "Voice override"},
+                    },
+                    ["text"],
+                ),
+            ),
+            "stop": _cmd(
+                "agents-voice stop",
+                "Stop currently playing audio on the host",
+                "mutating",
+                host_local=True,
+            ),
+            "status": _cmd(
+                "agents-voice status",
+                "Show current voice configuration and backend status",
+                "read-only",
+                host_local=True,
+            ),
+            "play": _cmd(
+                "agents-voice play",
+                "Play the latest voice message stored in the mailbox on the host",
+                "mutating",
+                host_local=True,
+            ),
+            "test": _cmd(
+                "agents-voice test",
+                "Play a quick test speech sample on the host",
+                "mutating",
+                host_local=True,
+            ),
+        },
+        "flags": ["--help-json"],
+    }
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agents-voice",
         description="Fast, minimal multi-provider speech output MCP server and CLI for AI coding agents.",
     )
+    parser.add_argument("--help-json", action="store_true", help="Emit machine-readable CLI spec as JSON.")
     subparsers = parser.add_subparsers(dest="subcommand", help="Subcommand to run")
 
     # serve
@@ -60,7 +173,8 @@ def main() -> None:
     config_p.add_argument("--hotkey", help="Global Windows shortcut to play latest message (e.g. alt+v)")
     config_p.add_argument(
         "--chime",
-        type=lambda v: str(v).lower() in ("1", "true", "yes", "on"),
+        type=str.lower,
+        choices=["true", "false"],
         help="Enable/disable chime when new message arrives (true/false)",
     )
 
@@ -73,7 +187,16 @@ def main() -> None:
     # test
     subparsers.add_parser("test", help="Play a quick test speech sample")
 
+    return parser
+
+
+def main() -> None:
+    parser = _build_parser()
     args = parser.parse_args()
+
+    if args.help_json:
+        print(json.dumps(help_json(), indent=2))
+        return
 
     if args.subcommand == "serve":
         serve()
@@ -122,7 +245,7 @@ def main() -> None:
             speed=args.speed,
             mode=args.mode,
             hotkey=args.hotkey,
-            chime=args.chime,
+            chime=args.chime == "true" if args.chime is not None else None,
         )
         print(
             f"Konfiguration gespeichert: Provider={cfg.provider}, "
